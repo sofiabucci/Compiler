@@ -1,4 +1,3 @@
--- src/Main.hs
 module Main where
 
 import AST
@@ -12,13 +11,12 @@ main = do
     case args of
         [filename] -> do
             content <- readFile filename
-            let tokens = lexer content
+            let tokens = alexScanTokens content
             putStrLn "=== TOKENS ==="
             mapM_ print tokens
             
             putStrLn "\n=== AST ==="
-            case parse tokens of
-                Left err -> putStrLn $ "Error: " ++ err
-                Right ast -> print ast
-                
+            let ast = parse tokens
+            print ast
+            
         _ -> putStrLn "Usage: stack run examples/test1.ada"

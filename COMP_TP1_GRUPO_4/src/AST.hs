@@ -1,4 +1,3 @@
--- src/AST.hs
 module AST where
 
 data Program = Program String [Statement]
