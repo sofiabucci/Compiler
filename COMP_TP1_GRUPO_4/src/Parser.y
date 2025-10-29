@@ -1,7 +1,5 @@
 {
-{-# LANGUAGE FlexibleContexts #-}
 module Parser where
-
 import AST
 import Lexer
 }

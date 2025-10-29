@@ -1,7 +1,5 @@
 {
-{-# LANGUAGE FlexibleContexts #-}
 module Lexer where
-
 import AST
 }
 
