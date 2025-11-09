@@ -1,0 +1,41 @@
+# PRIMEIRA ENTREGA - TRABALHO COMPILADORES
+
+Este projeto implementa um analisador lexical e um analisador sintático para o subconjunto da linguagem de programação Ada usando Haskell, Alex (gerador de lexer) e Happy (gerador de parser).
+
+
+
+## COMPONENTES
+1. Lexer (Lexer.x)
+O analisador léxico transforma o código fonte Ada num fluxo de tokens. Reconhece estruturas de controlo, (como procedure, is, begin, end, if, then, while, loop), operador lógicos (and, or, not), valores booleanos (True, False), funções input (Put_Line) e funções output (Get_Line). Além disso, produz um ficheiro de código Haskell (Lexer.hs).
+
+Tokens:
+- Identificadores: sequências alfanuméricas que começam com uma letra
+- Inteiros: sequências de dígitos
+- Strings: sequências de texto entre aspas
+- Operadores: :=, +, -, *, /, =, <, >
+- Delimitadores: (, ), ;, :
+
+Funcionalidades:
+- Tratamento de espaços em branco e comentários
+- Procura da posição do token
+
+
+2. Parser (Parser.y)
+O analisador sintático cria uma AST (Abstract Syntax Tree) a partir do fluxo de tokens usando as regras gramaticais.
+
+Declarações:
+- declarações de várias variáveis com inicialização opcional
+
+Instruções:
+- atribuições
+- condicionais (if, then, else)
+- loops (while)
+- operações de input e output
+
+Precedências dos Operadores:
+1. operadores unários: not, - (negação)
+2. multiplicação (*) e divisão (/)
+3. adição (+) e subtração (-)
+4. operador lógico AND
+5. operador lógico OR
+6. comparação: =, <, >
