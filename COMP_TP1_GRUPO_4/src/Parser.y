@@ -1,104 +1,105 @@
 {
 module Parser where
+
 import AST
 import Lexer
 }
 
-%name parseProgram
+%name parse
 %tokentype { Token }
+%error { parseError }
 
 %token
-    TIdentifier   { TIdentifier $$ }
-    TInt          { TInt $$ }
-    TString       { TString $$ }
-    TProcedure    { TProcedure }
-    TIs           { TIs }
-    TBegin        { TBegin }
-    TEnd          { TEnd }
-    TIf           { TIf }
-    TThen         { TThen }
-    TElse         { TElse }
-    TWhile        { TWhile }
-    TLoop         { TLoop }
-    TAnd          { TAnd }
-    TOr           { TOr }
-    TNot          { TNot }
-    TPutLine      { TPutLine }
-    TGetLine      { TGetLine }
-    TAssign       { TAssign }
-    TPlus         { TPlus }
-    TMinus        { TMinus }
-    TMult         { TMult }
-    TDiv          { TDiv }
-    TEq           { TEq }
-    TLt           { TLt }
-    TGt           { TGt }
-    TSemi         { TSemi }
-    TColon        { TColon }
-    TComma        { TComma }
-    TLParen       { TLParen }
-    TRParen       { TRParen }
+    procedure   { TokenProcedure }
+    is          { TokenIs }
+    begin       { TokenBegin }
+    end         { TokenEnd }
+    if          { TokenIf }
+    then        { TokenThen }
+    else        { TokenElse }
+    while       { TokenWhile }
+    loop        { TokenLoop }
+    and         { TokenAnd }
+    or          { TokenOr }
+    not         { TokenNot }
+    true        { TokenTrue }
+    false       { TokenFalse }
+    putline     { TokenPutLine }
+    getline     { TokenGetLine }
+    int         { TokenInt $$ }
+    string      { TokenString $$ }
+    ':='        { TokenAssign }
+    ':'         { TokenColon }
+    '+'         { TokenPlus }
+    '-'         { TokenMinus }
+    '*'         { TokenTimes }
+    '/'         { TokenDiv }
+    '='         { TokenEq }
+    '<'         { TokenLt }
+    '>'         { TokenGt }
+    '('         { TokenLParen }
+    ')'         { TokenRParen }
+    ';'         { TokenSemicolon }
 
-%nonassoc TElse
-%right TAssign
-%left TOr
-%left TAnd
-%left TEq TLt TGt
-%left TPlus TMinus
-%left TMult TDiv
-%right TNot
+%token id      { TokenId $$ }
+
+%nonassoc '=' '<' '>'
+%left or
+%left and  
+%left '+' '-'
+%left '*' '/'
+%right not
+%right NEG
 
 %%
 
-Program : TProcedure TIdentifier TIs TBegin Statements TEnd TSemi
-            { Program $2 $5 }
+-- Programa completo: procedure nome is Declarações begin Statements end nome ;
+Program : procedure id is Declarations begin Statements end id ';'
+            { Program $2 $4 $6 }
 
-Statements : {- empty -}           { [] }
-           | Statement Statements  { $1 : $2 }
+-- Lista de declarações
+Declarations : {- empty -}             { [] }
+             | Declaration Declarations { $1 : $2 }
 
-Statement : Assignment
-          | IfStmt
-          | WhileStmt
-          | ExpressionStmt
+-- Declaração individual, com ou sem inicialização
+Declaration : id ':' id ';'                        { ($1, $3) }
+            | id ':' id ':=' Expression ';'        { ($1, $3) }
 
-Assignment : TIdentifier TAssign Expression TSemi
-            { Assignment $1 $3 }
+-- Lista de instruções
+Statements : {- empty -}               { [] }
+           | Statement Statements      { $1 : $2 }
 
-IfStmt : TIf Expression TThen Statements TEnd TIf TSemi
-          { If $2 $4 Nothing }
-       | TIf Expression TThen Statements TElse Statements TEnd TIf TSemi
-          { If $2 $4 (Just $6) }
+-- Instruções
+Statement : id ':=' Expression ';'              { Assignment $1 $3 }
+          | if Expression then Statements end if ';'  
+              { If $2 $4 Nothing }
+          | if Expression then Statements else Statements end if ';'  
+              { If $2 $4 (Just $6) }
+          | while Expression loop Statements end loop ';'  
+              { While $2 $4 }
+          | putline '(' Expression ')' ';'      { ExpressionStmt (Call "Put_Line" [$3]) }
+          | getline ';'                         { ExpressionStmt (Call "Get_Line" []) }
 
-WhileStmt : TWhile Expression TLoop Statements TEnd TLoop TSemi
-             { While $2 $4 }
-
-ExpressionStmt : Expression TSemi
-                  { ExpressionStmt $1 }
-
-Expression : TIdentifier           { Var $1 }
-           | TInt                  { IntLit $1 }
-           | TString               { StrLit $1 }
-           | TPutLine TLParen Expression TRParen
-                                   { Call "Put_Line" [$3] }
-           | TGetLine TLParen TRParen
-                                   { Call "Get_Line" [] }
-           | Expression TPlus Expression   { BinOp Add $1 $3 }
-           | Expression TMinus Expression  { BinOp Sub $1 $3 }
-           | Expression TMult Expression   { BinOp Mul $1 $3 }
-           | Expression TDiv Expression    { BinOp Div $1 $3 }
-           | Expression TEq Expression     { BinOp Eq $1 $3 }
-           | Expression TLt Expression     { BinOp Lt $1 $3 }
-           | Expression TGt Expression     { BinOp Gt $1 $3 }
-           | Expression TAnd Expression    { BinOp And $1 $3 }
-           | Expression TOr Expression     { BinOp Or $1 $3 }
-           | TNot Expression        { UnOp Not $2 }
-           | TMinus Expression      %prec TNot { UnOp Neg $2 }
-           | TLParen Expression TRParen { $2 }
+-- Expressões
+Expression : id                                 { Var $1 }
+           | int                                { IntLit $1 }
+           | string                             { StrLit $1 }
+           | true                               { BoolLit True }
+           | false                              { BoolLit False }
+           | Expression '+' Expression          { BinOp Add $1 $3 }
+           | Expression '-' Expression          { BinOp Sub $1 $3 }
+           | Expression '*' Expression          { BinOp Mul $1 $3 }
+           | Expression '/' Expression          { BinOp Div $1 $3 }
+           | Expression '=' Expression          { BinOp Eq $1 $3 }
+           | Expression '<' Expression          { BinOp Lt $1 $3 }
+           | Expression '>' Expression          { BinOp Gt $1 $3 }
+           | Expression and Expression          { BinOp And $1 $3 }
+           | Expression or Expression           { BinOp Or $1 $3 }
+           | not Expression                     { UnOp Not $2 }
+           | '-' Expression %prec NEG           { UnOp Neg $2 }
+           | '(' Expression ')'                 { $2 }
 
 {
-happyError :: [Token] -> a
-happyError _ = error "Syntax error"
-
-parse :: [Token] -> Program
-parse = parseProgram
+parseError :: [Token] -> a
+parseError tokens = error ("Parse error at: " ++ show (take 10 tokens))
 }

@@ -1,77 +1,85 @@
 {
 module Lexer where
-import AST
 }
 
 %wrapper "basic"
 
-$white = [\ \t\n\r]+
-$digit = [0-9]
+$digit = 0-9
 $alpha = [a-zA-Z]
+$alphanum = [a-zA-Z0-9_]
 
 tokens :-
 
--- Comentários
---.*                           ;
-
--- Palavras reservadas
-procedure                     { \s -> TProcedure }
-is                            { \s -> TIs }
-begin                         { \s -> TBegin }
-end                           { \s -> TEnd }
-if                            { \s -> TIf }
-then                          { \s -> TThen }
-else                          { \s -> TElse }
-while                         { \s -> TWhile }
-loop                          { \s -> TLoop }
-and                           { \s -> TAnd }
-or                            { \s -> TOr }
-not                           { \s -> TNot }
-Put_Line                      { \s -> TPutLine }
-Get_Line                      { \s -> TGetLine }
-
--- Identificadores
-$alpha [$alpha $digit \_ \']* { \s -> TIdentifier s }
-
--- Números
-$digit+                       { \s -> TInt (read s) }
-
--- Strings
-\" [^\"]* \"                  { \s -> TString (init (tail s)) }
-
--- Símbolos
-":="                          { \s -> TAssign }
-"+"                           { \s -> TPlus }
-"-"                           { \s -> TMinus }
-"*"                           { \s -> TMult }
-"/"                           { \s -> TDiv }
-"="                           { \s -> TEq }
-"<"                           { \s -> TLt }
-">"                           { \s -> TGt }
-";"                           { \s -> TSemi }
-":"                           { \s -> TColon }
-","                           { \s -> TComma }
-"("                           { \s -> TLParen }
-")"                           { \s -> TRParen }
-
--- Whitespace
-$white+                       ;
+  $white+                       ;
+  "--".*                        ;
+  
+  procedure                     { \s -> TokenProcedure }
+  is                            { \s -> TokenIs }
+  begin                         { \s -> TokenBegin }
+  end                           { \s -> TokenEnd }
+  if                            { \s -> TokenIf }
+  then                          { \s -> TokenThen }
+  else                          { \s -> TokenElse }
+  while                         { \s -> TokenWhile }
+  loop                          { \s -> TokenLoop }
+  and                           { \s -> TokenAnd }
+  or                            { \s -> TokenOr }
+  not                           { \s -> TokenNot }
+  True                          { \s -> TokenTrue }
+  False                         { \s -> TokenFalse }
+  
+  Put_Line                      { \s -> TokenPutLine }
+  Get_Line                      { \s -> TokenGetLine }
+  
+  $alpha $alphanum*             { \s -> TokenId s }
+  $digit+                       { \s -> TokenInt (read s) }
+  \"[^\"]*\"                    { \s -> TokenString (init (tail s)) }
+  
+  ":="                          { \s -> TokenAssign }
+  ":"                           { \s -> TokenColon }        
+  "+"                           { \s -> TokenPlus }
+  "-"                           { \s -> TokenMinus }
+  "*"                           { \s -> TokenTimes }
+  "/"                           { \s -> TokenDiv }
+  "="                           { \s -> TokenEq }
+  "<"                           { \s -> TokenLt }
+  ">"                           { \s -> TokenGt }
+  "("                           { \s -> TokenLParen }
+  ")"                           { \s -> TokenRParen }
+  ";"                           { \s -> TokenSemicolon }
 
 {
-alexScanTokens :: String -> [Token]
-alexScanTokens = alexScanTokens'
-
 data Token
-    = TIdentifier String
-    | TInt Integer
-    | TString String
-    | TProcedure | TIs | TBegin | TEnd 
-    | TIf | TThen | TElse | TWhile | TLoop
-    | TAnd | TOr | TNot
-    | TPutLine | TGetLine
-    | TAssign | TPlus | TMinus | TMult | TDiv
-    | TEq | TLt | TGt
-    | TSemi | TColon | TComma | TLParen | TRParen
-    | TEOF
-    deriving (Show, Eq, Ord)
+  = TokenProcedure
+  | TokenIs
+  | TokenBegin
+  | TokenEnd
+  | TokenIf
+  | TokenThen
+  | TokenElse
+  | TokenWhile
+  | TokenLoop
+  | TokenAnd
+  | TokenOr
+  | TokenNot
+  | TokenTrue
+  | TokenFalse
+  | TokenPutLine
+  | TokenGetLine
+  | TokenId String
+  | TokenInt Integer
+  | TokenString String
+  | TokenAssign
+  | TokenColon                
+  | TokenPlus
+  | TokenMinus
+  | TokenTimes
+  | TokenDiv
+  | TokenEq
+  | TokenLt
+  | TokenGt
+  | TokenLParen
+  | TokenRParen
+  | TokenSemicolon
+  deriving (Eq, Show)
 }

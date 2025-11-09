@@ -1,6 +1,6 @@
 module AST where
 
-data Program = Program String [Statement]
+data Program = Program String [(String, String)] [Statement]
     deriving (Show, Eq)
 
 data Statement 
@@ -20,7 +20,7 @@ data Expression
     | Call String [Expression]
     deriving (Show, Eq)
 
-data Op = Add | Sub | Mul | Div | Eq | Lt | Gt | And | Or
+data Op = Add | Sub | Mul | Div | Eq | Neq | Lt | Gt | Leq | Geq | And | Or
     deriving (Show, Eq)
 
 data UnOp = Not | Neg
