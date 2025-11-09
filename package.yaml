@@ -1,0 +1,19 @@
+name: ada-compiler
+version: 0.1.0.0
+github: "yourname/ada-compiler"
+license: BSD3
+author: "Your Name"
+maintainer: "your.email@example.com"
+
+dependencies:
+- base >= 4.7 && < 5
+- array
+
+executables:
+  ada-compiler-exe:
+    main: Main.hs
+    source-dirs: .
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
