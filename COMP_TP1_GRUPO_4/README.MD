@@ -62,3 +62,43 @@ sintática do código fonte.
   else 
       ... 
   end if;
+
+
+
+# SEGUNDA ENTREGA - TRABALHO DE COMPILADORES
+
+## DESCRIÇÃO DO PROJETO
+
+Esta segunda parte implementa a **tabela de símbolos**, **geração de código intermediário (Three-Address Code)** e **geração de código MIPS** para o subconjunto de Ada definido na primeira entrega.
+
+## COMPONENTES ADICIONADOS
+
+### 1. TABELA DE SÍMBOLOS (`SymbolTable.hs`)
+
+- Rastreia nomes, tipos e offsets de variáveis
+- Suporte a escopos aninhados
+- Deteção de declarações duplicadas
+
+### 2. CÓDIGO DE TRÊS ENDEREÇOS (`TAC.hs`)
+
+**Instruções suportadas:**
+- `x = y op z`
+- `ifz x goto L`
+- `goto L`
+- `param x`
+- `call f, n`
+- `return x`
+
+### 3. GERADOR DE CÓDIGO MIPS (`MIPSGenerator.hs`)
+
+**Conversões principais:**
+- Variáveis → registos `$s0-$s7`
+- Temporários → registos `$t0-$t9`
+- Operações aritméticas → instruções MIPS correspondentes
+- `Put_Line` → `syscall` com código 4
+- `Get_Line` → `syscall` com código 8
+
+## EXECUÇÃO
+
+```bash
+stack run examples/test1.ada

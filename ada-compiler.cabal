@@ -20,8 +20,6 @@ source-repository head
 executable ada-compiler-exe
   main-is: Main.hs
   other-modules:
-      Lexer
-      Parser
       Paths_ada_compiler
   hs-source-dirs:
       ./
