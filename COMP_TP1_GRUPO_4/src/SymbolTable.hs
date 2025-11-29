@@ -1,38 +1,93 @@
 module SymbolTable where
+import Data.Map as Map
 
-import Data.Map (Map)
-import qualified Data.Map as Map
+data SymbolCategory = Variable
+                     | Function
+                     | Type
+                     deriving (Eq, Show)
 
-data Type = IntType | StringType | BoolType | UnknownType
-    deriving (Show, Eq)
+data DataType = IntegerType
+               | FloatType
+               | BooleanType
+               | CharacterType
+               | ArrayType Int DataType
+               | RecordType [(String, DataType)]
+               | UnknowType
+               deriving (Eq, Show)
 
-data Symbol = Symbol 
-    { symName :: String
-    , symType :: Type
-    , symOffset :: Int
-    } deriving (Show)
+data SymbolInfo = SymbolInfo {
+    symbolCategory :: SymbolCategory,
+    dataType :: DataType, 
+    isConstant :: Bool, 
+    value :: Maybe String
+} deriving (Eq, Show)
 
-type SymbolTable = Map String Symbol
 
-data Scope = Scope 
-    { scopeSymbols :: SymbolTable
-    , scopeParent :: Maybe Scope
-    , nextOffset :: Int
-    }
+emptyTable :: SymbolTable
+emptyTable = Map.empty
 
-newScope :: Maybe Scope -> Scope
-newScope parent = Scope Map.empty parent 0
+insertSymbol :: String -> SymbolInfo -> SymbolTable -> SymbolTable
+insertSymbol name category table = Map.insert name category table
 
-insertSymbol :: String -> Type -> Scope -> Scope
-insertSymbol name typ scope = 
-    let sym = Symbol name typ (nextOffset scope)
-        newSymbols = Map.insert name sym (scopeSymbols scope)
-    in scope { scopeSymbols = newSymbols, nextOffset = nextOffset scope + 4 }
+lookupSymbol :: String -> SymbolTable -> Maybe SymbolInfo
+lookupSymbol name table = Map.lookup name table
 
-lookupSymbol :: String -> Scope -> Maybe Symbol
-lookupSymbol name scope = 
-    case Map.lookup name (scopeSymbols scope) of
-        Just sym -> Just sym
-        Nothing -> case scopeParent scope of
-            Just parent -> lookupSymbol name parent
-            Nothing -> Nothing
+
+type ScopeStack = [SymbolTable]
+
+initialScope :: ScopeStack
+initialScope = [emptyTable]
+
+enterScope :: ScopeStack -> ScopeStack
+enterScope stack = emptyTable : stack
+
+exitScope :: ScopeStack -> ScopeStack
+exitScope [] = error "Stack Vazia, logo não há âmbitos para fechar!"
+exitScope (_:rest) = rest
+
+lookupSymbolScope :: String -> ScopeStack -> Maybe SymbolInfo
+lookupSymbolScope _ [] = Nothing
+lookupSymbolScope name (current:outerScopes) = 
+    case lookupSymbol name current of
+        Just info -> Just info            
+        Nothing -> lookupSymbolScope name outerScopes     
+
+declareSymbol :: String -> SymbolInfo -> ScopeStack -> ScopeStack
+declareSymbol name category [] = error "Stack Vazia, logo não há âmbitos para fechar!"
+declareSymbol name category (current:outerScopes) =
+    (insertSymbol name category current) : outerScopes
+
+type SymbolTable = Map.Map String SymbolInfo
+
+makeVariable :: DataType -> SymbolInfo
+makeVariable typ = SymbolInfo Variable typ False Nothing
+
+makeFunction :: DataType -> SymbolInfo
+makeFunction returnType = SymbolInfo Function returnType False Nothing
+
+makeType :: DataType -> SymbolInfo
+makeType typ = SymbolInfo Type typ False Nothing
+
+makeConstant :: DataType -> String -> SymbolInfo
+makeConstant typ val = SymbolInfo Variable typ True (Just val)
+
+declareVariable :: String -> DataType -> ScopeStack -> ScopeStack
+declareVariable name typ stack = declareSymbol name (makeVariable typ) stack
+
+declareFunction :: String -> DataType -> ScopeStack -> ScopeStack
+declareFunction name returnType stack = declareSymbol name (makeFunction returnType) stack
+
+declareType :: String -> DataType -> ScopeStack -> ScopeStack
+declareType name typ stack = declareSymbol name (makeType typ) stack
+
+getSymbolType :: String -> ScopeStack -> Maybe DataType
+getSymbolType name stack =
+    case lookupSymbolScope name stack of
+        Just info -> Just (dataType info)
+        Nothing -> Nothing
+
+isInteger :: String -> ScopeStack -> Bool
+isInteger name stack =
+    case getSymbolType name stack of
+        Just IntegerType -> True 
+        _ -> False
