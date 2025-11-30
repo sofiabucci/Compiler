@@ -1,56 +1,81 @@
-{-
-Módulo: Main.hs
-Descrição: Testa o compilador completo
--}
-
 module Main where
 
 import AST
-import Compiler
+import TAC
+import TACGenerator
 import MIPSGenerator
-import System.IO (writeFile)
+import Parser (parse)
+import Lexer (alexScanTokens)
+import System.IO (readFile, writeFile)
+import System.Directory (doesFileExist)
+import System.FilePath (takeBaseName)
 
 main :: IO ()
 main = do
-    putStrLn "=== TESTE DO COMPILADOR ==="
+    putStrLn "=== COMPILADOR ADA -> TAC -> MIPS ==="
+    putStrLn "=== SEGUNDA PARTE DO TRABALHO ===\n"
     
-    -- Teste 1: Expressão aritmética x - 2*5
-    putStrLn "\n1. Compilação da expressão: x - 2*5"
-    let expr = Minus (Var "x") (Mult (Number 2) (Number 5))
-    let tac1 = compileExprMain expr
-    putStrLn "Código de três endereços:"
-    mapM_ (putStrLn . instrToString) tac1
+    -- Define o arquivo de entrada
+    let filePath = "examples/test1.ada"
     
-    putStrLn "\nCódigo MIPS:"
-    let mips1 = printMIPS tac1
-    putStrLn mips1
-    writeFile "expr_test.asm" mips1
+    putStrLn $ "PROCURANDO ARQUIVO: " ++ filePath
+
+-- Compila um arquivo .ada usando o lexer e parser existentes
+compileAdaFile :: FilePath -> IO ()
+compileAdaFile filePath = do
+    -- Lê o conteúdo do arquivo
+    content <- readFile filePath
     
-    -- Teste 2: Comando if-then-else
-    putStrLn "\n2. Compilação do comando: if x > 5 then y := 10 else y := 20"
-    let cmd = If (Greater (Var "x") (Number 5)) 
-                 (Assign "y" (Number 10)) 
-                 (Assign "y" (Number 20))
-    let tac2 = compileCmdMain cmd
-    putStrLn "Código de três endereços:"
-    mapM_ (putStrLn . instrToString) tac2
+    putStrLn "📝 CÓDIGO FONTE ADA:"
+    putStrLn "==================="
+    putStrLn content
+    putStrLn ""
     
-    putStrLn "\nCódigo MIPS:"
-    let mips2 = printMIPS tac2
-    putStrLn mips2
-    writeFile "cmd_test.asm" mips2
+    -- Usa o lexer e parser existentes
+    putStrLn "🔍 FAZENDO LEXING E PARSING..."
+    putStrLn "=============================="
     
-    -- Teste 3: Comando while
-    putStrLn "\n3. Compilação do comando: while x < 10 do x := x + 1"
-    let cmd3 = While (Less (Var "x") (Number 10)) 
-                     (Assign "x" (Plus (Var "x") (Number 1)))
-    let tac3 = compileCmdMain cmd3
-    putStrLn "Código de três endereços:"
-    mapM_ (putStrLn . instrToString) tac3
+    let tokens = alexScanTokens content
+    putStrLn $ "Tokens reconhecidos: " ++ show (length tokens) ++ " tokens"
     
-    putStrLn "\nCódigo MIPS:"
-    let mips3 = printMIPS tac3
-    putStrLn mips3
-    writeFile "while_test.asm" mips3
+    let parseResult = parse tokens
+    putStrLn "Parsing concluído com sucesso!"
+    putStrLn ""
     
-    putStrLn "\n✅ Arquivos .asm gerados para teste no MARS!"
+    putStrLn "ESTRUTURA AST:"
+    putStrLn "================"
+    print parseResult
+    putStrLn ""
+    
+    putStrLn "GERANDO CÓDIGO TAC..."
+    putStrLn "========================"
+    
+    let tacCode = generateTAC parseResult
+    putStrLn "CÓDIGO TAC GERADO:"
+    putStrLn "------------------"
+    mapM_ (putStrLn . tacToString) tacCode
+    
+    putStrLn ""
+    putStrLn "GERANDO CÓDIGO MIPS..."
+    putStrLn "========================="
+    
+    let mipsCode = generateMIPS tacCode
+    
+    -- Gera nomes de arquivo baseados no arquivo de entrada
+    let baseName = takeBaseName filePath
+    let tacFile = baseName ++ ".tac"
+    let asmFile = baseName ++ ".asm"
+    
+    -- Escreve os arquivos de saída
+    writeFile tacFile (unlines (map tacToString tacCode))
+    writeFile asmFile mipsCode
+    
+    putStrLn $ "ARQUIVOS GERADOS COM SUCESSO:"
+    putStrLn $ "   - " ++ tacFile ++ " (Código TAC)"
+    putStrLn $ "   - " ++ asmFile ++ " (Código MIPS)"
+    putStrLn ""
+    putStrLn "PARA TESTAR NO MARS:"
+    putStrLn $ "   - Abra o arquivo " ++ asmFile ++ " no MARS"
+    putStrLn $ "   - Execute e verifique a saída"
+    putStrLn ""
+    putStrLn "COMPILAÇÃO CONCLUÍDA!"

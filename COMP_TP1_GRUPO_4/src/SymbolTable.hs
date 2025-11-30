@@ -42,7 +42,7 @@ enterScope :: ScopeStack -> ScopeStack
 enterScope stack = emptyTable : stack
 
 exitScope :: ScopeStack -> ScopeStack
-exitScope [] = error "Stack Vazia, logo não há âmbitos para fechar!"
+exitScope [] = error "Stack Vazia, logo não há âmbitos para fechar"
 exitScope (_:rest) = rest
 
 lookupSymbolScope :: String -> ScopeStack -> Maybe SymbolInfo
@@ -53,7 +53,7 @@ lookupSymbolScope name (current:outerScopes) =
         Nothing -> lookupSymbolScope name outerScopes     
 
 declareSymbol :: String -> SymbolInfo -> ScopeStack -> ScopeStack
-declareSymbol name category [] = error "Stack Vazia, logo não há âmbitos para fechar!"
+declareSymbol name category [] = error "Stack Vazia, logo não há âmbitos para fechar"
 declareSymbol name category (current:outerScopes) =
     (insertSymbol name category current) : outerScopes
 

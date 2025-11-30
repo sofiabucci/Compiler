@@ -1,78 +1,112 @@
-{-
-Módulo: MIPSGenerator.hs
-Descrição: Converte código de três endereços para assembly MIPS
--}
-
 module MIPSGenerator where
 
 import TAC
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.List (intercalate)
 
 -- Função principal: converte programa TAC para MIPS
 generateMIPS :: TACProgram -> String
 generateMIPS instrs = unlines $
-    [ ".data"                       -- Seção de dados
-    , "input: .space 100"           -- Buffer para entrada
-    , "newline: .asciiz \"\\n\""    -- String para nova linha
-    , ".text"                       -- Seção de código
-    , "main:"                       -- Ponto de entrada
-    ] ++ map instrToMIPS instrs ++  -- Converte cada instrução
-    [ "li $v0, 10"                  -- Exit syscall
-    , "syscall"
+    [ "# ===== SEÇÃO DE DADOS ====="
+    , ".data"
+    , "  input:    .space 100       # Buffer para entrada"
+    , "  newline:  .asciiz \"\\n\"    # String para nova linha"
+    , "  true_str: .asciiz \"true\"  # String para true"
+    , "  false_str:.asciiz \"false\" # String para false"
+    , ""
+    , "# ===== SEÇÃO DE CÓDIGO ====="
+    , ".text"
+    , ".globl main"
+    , "main:"
+    ] ++ map instrToMIPS instrs ++
+    [ ""
+    , "# ===== FINALIZAÇÃO DO PROGRAMA ====="
+    , "  li $v0, 10                 # Syscall para exit"
+    , "  syscall"
     ]
 
 -- Converte uma instrução TAC para MIPS
 instrToMIPS :: TAC -> String
 instrToMIPS (Assign dest expr) = 
-    let (src, code) = exprToMIPS expr  -- Converte expressão fonte
-    in code ++ "move " ++ regForVar dest ++ ", " ++ src  -- move dest, src
+    let (srcReg, srcCode) = exprToMIPS expr
+        destReg = regForVar dest
+    in srcCode ++ "  move " ++ destReg ++ ", " ++ srcReg ++ "       # " ++ dest ++ " = " ++ tacShowExpr expr
 
-instrToMIPS (Label lbl) = lbl ++ ":"   -- Rótulo MIPS
+instrToMIPS (Label lbl) = 
+    lbl ++ ":                          # RÓTULO"
 
-instrToMIPS (Goto lbl) = "j " ++ lbl   -- Jump incondicional
+instrToMIPS (Goto lbl) = 
+    "  j " ++ lbl ++ "                   # GOTO"
 
 instrToMIPS (IfZ cond lbl) = 
-    let (creg, code) = exprToMIPS cond  -- Converte condição
-    in code ++ "beqz " ++ creg ++ ", " ++ lbl  -- Branch if equal zero
+    let (condReg, condCode) = exprToMIPS cond
+    in condCode ++ "  beqz " ++ condReg ++ ", " ++ lbl ++ "     # IFZ " ++ tacShowExpr cond
 
 instrToMIPS (IfNZ cond lbl) = 
-    let (creg, code) = exprToMIPS cond
-    in code ++ "bnez " ++ creg ++ ", " ++ lbl  -- Branch if not zero
+    let (condReg, condCode) = exprToMIPS cond
+    in condCode ++ "  bnez " ++ condReg ++ ", " ++ lbl ++ "     # IFNZ " ++ tacShowExpr cond
 
 instrToMIPS (Param expr) = 
     let (reg, code) = exprToMIPS expr
-    in code ++ "move $a0, " ++ reg      -- Move para registo de argumento
+    in code ++ "  move $a0, " ++ reg ++ "              # PARAM " ++ tacShowExpr expr
 
--- Chamada de Put_Line (syscall 4 - print string)
+-- Chamada de Put_Line 
 instrToMIPS (Call "Put_Line" 1) = 
-    "li $v0, 4\nsyscall"               -- System call para print string
+    unlines [ "  li $v0, 4                   # Put_Line string"
+            , "  syscall"
+            , "  la $a0, newline            # Nova linha"
+            , "  li $v0, 4"
+            , "  syscall" ]
 
--- Chamada de Get_Line (syscall 8 - read string)  
+-- Chamada de Get_Line 
 instrToMIPS (Call "Get_Line" 0) = 
-    "li $v0, 8\nla $a0, input\nli $a1, 100\nsyscall"
+    unlines [ "  li $v0, 8                   # Get_Line input"
+            , "  la $a0, input"
+            , "  li $a1, 100"
+            , "  syscall" ]
 
-instrToMIPS _ = ""  -- Instrução não suportada
+-- Chamada genérica de função
+instrToMIPS (Call func n) = 
+    "  jal " ++ func ++ "                  # CALL " ++ func ++ " (" ++ show n ++ " params)"
+
+instrToMIPS (Return expr) = 
+    let (reg, code) = exprToMIPS expr
+    in code ++ "  move $v0, " ++ reg ++ "              # RETURN " ++ tacShowExpr expr ++ "\n" ++ 
+       "  jr $ra"
 
 -- Converte expressão TAC para registo MIPS + código
 exprToMIPS :: TACExpr -> (String, String)
-exprToMIPS (TACVar v) = (regForVar v, "")  -- Variável → registo
-
-exprToMIPS (TACInt i) = ("$t0", "li $t0, " ++ show i ++ "\n")  -- Inteiro → load immediate
-
-exprToMIPS (TACStr s) = ("$a0", "la $a0, str_" ++ show (hash s) ++ "\n")  -- String → load address
-
-exprToMIPS (TACBool True) = ("$t0", "li $t0, 1\n")    -- True → 1
-exprToMIPS (TACBool False) = ("$t0", "li $t0, 0\n")   -- False → 0
-
-exprToMIPS (TACTemp t) = ("$t" ++ show t, "")  -- Temporário → registo temporário
+exprToMIPS (TACVar v) = (regForVar v, "")
+exprToMIPS (TACInt i) = ("$t0", "  li $t0, " ++ show i ++ "           # Inteiro " ++ show i ++ "\n")
+exprToMIPS (TACStr s) = 
+    let label = "str_" ++ show (hash s)
+    in ("$a0", "  la $a0, " ++ label ++ "         # String: " ++ s ++ "\n")
+exprToMIPS (TACBool True) = ("$t0", "  li $t0, 1                 # Boolean true\n")
+exprToMIPS (TACBool False) = ("$t0", "  li $t0, 0                 # Boolean false\n")
+exprToMIPS (TACTemp t) = ("$t" ++ show (t `mod` 8), "")
 
 -- Mapeia variáveis para registos MIPS
 regForVar :: String -> String
-regForVar "retval" = "$v0"    -- Valor de retorno
-regForVar "input" = "$a0"     -- Input buffer
-regForVar var = "$s" ++ show (hash var `mod` 8)  -- Variáveis → $s0-$s7
+regForVar "retval" = "$v0"          
+regForVar "input" = "$a0"           
+regForVar var
+    | var `elem` ["t0","t1","t2","t3","t4","t5","t6","t7"] = "$" ++ var
+    | take 1 var == "t" && all (`elem` "0123456789") (drop 1 var) = "$t" ++ show (read (drop 1 var) `mod` 8)
+    | otherwise = "$s" ++ show (hash var `mod` 4 + 1)  
 
 -- Função hash simples para distribuir variáveis em registos
 hash :: String -> Int
 hash = foldl (\acc c -> acc * 31 + fromEnum c) 0
+
+-- Função auxiliar para imprimir programa MIPS completo
+printMIPS :: TACProgram -> String
+printMIPS = generateMIPS
+
+-- Converte expressão TAC para string 
+tacShowExpr :: TACExpr -> String
+tacShowExpr (TACVar v) = v
+tacShowExpr (TACInt i) = show i
+tacShowExpr (TACStr s) = "\"" ++ s ++ "\""
+tacShowExpr (TACBool b) = show b
+tacShowExpr (TACTemp t) = "t" ++ show t

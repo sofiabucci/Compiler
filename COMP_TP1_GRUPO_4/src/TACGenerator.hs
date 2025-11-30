@@ -1,8 +1,3 @@
-{-
-Módulo: TACGenerator.hs
-Descrição: Gera código de três endereços a partir da AST
--}
-
 module TACGenerator where
 
 import AST
@@ -10,27 +5,42 @@ import SymbolTable
 import TAC
 import Control.Monad.State
 
--- Estado do gerador: (próximo temporário, lista de instruções)
-type GenState = (Int, [TAC])
+-- Estado do gerador: (próximo temporário, próximo rótulo, lista de instruções)
+type GenState = (Int, Int, [TAC])
 type GenM = State GenState
 
--- Gera um novo temporário único
+-- Gera um novo temporário único (retorna como TACTemp)
 freshTemp :: GenM TACExpr
 freshTemp = do
-    (n, instrs) <- get           -- Pega estado atual
-    put (n+1, instrs)            -- Atualiza contador
-    return (TACTemp n)           -- Retorna novo temporário
+    (tempCount, labelCount, instrs) <- get
+    put (tempCount + 1, labelCount, instrs)
+    return (TACTemp tempCount)
+
+-- Gera um novo rótulo único
+freshLabel :: GenM String
+freshLabel = do
+    (tempCount, labelCount, instrs) <- get
+    put (tempCount, labelCount + 1, instrs)
+    return $ "L" ++ show labelCount
 
 -- Adiciona uma instrução à lista
 emit :: TAC -> GenM ()
 emit instr = do
-    (n, instrs) <- get           -- Pega instruções atuais
-    put (n, instrs ++ [instr])   -- Adiciona nova instrução
+    (tempCount, labelCount, instrs) <- get
+    put (tempCount, labelCount, instrs ++ [instr])
+
+-- Helper: converte um TACTemp em nome de variável "tN"
+tempName :: TACExpr -> String
+tempName (TACTemp n) = "t" ++ show n
+tempName (TACVar v)  = v
+tempName _ = error "tempName: expected TACTemp or TACVar"
 
 -- Função principal: converte AST para TAC
 generateTAC :: Program -> TACProgram
-generateTAC (Program name _ stmts) = 
-    let (_, instrs) = runState (genStmts stmts) (0, [])  -- Executa monad State
+generateTAC (Program _name _declarations stmts) =
+    let initialState = (0, 0, []) :: GenState
+        (_, newState) = runState (genStmts stmts) initialState
+        (_, _, instrs) = newState
     in instrs
 
 -- Gera código para lista de statements
@@ -40,107 +50,93 @@ genStmts = mapM_ genStmt
 -- Gera código para um statement individual
 genStmt :: Statement -> GenM ()
 genStmt (Assignment var expr) = do
-    tacExpr <- genExpr expr          -- Gera código para expressão
-    emit $ Assign var tacExpr        -- Emite instrução de atribuição
+    tacExpr <- genExpr expr
+    emit $ Assign var tacExpr
 
 genStmt (If cond thenStmts elseStmts) = do
-    elseLabel <- freshLabel          -- Rótulo para else
-    endLabel <- freshLabel           -- Rótulo para fim do if
-    condExpr <- genExpr cond         -- Gera código para condição
-    
-    -- if (cond == false) goto elseLabel
-    emit $ IfZ condExpr elseLabel
-    
-    -- Código do then
+    elseLabel <- freshLabel
+    endLabel <- freshLabel
+    condTemp <- genExpr cond
+    emit $ IfZ condTemp elseLabel
     genStmts thenStmts
-    
-    -- goto endLabel (pular else)
     emit $ Goto endLabel
-    
-    -- elseLabel:
     emit $ Label elseLabel
-    
-    -- Código do else (se existir)
     case elseStmts of
         Just stmts -> genStmts stmts
         Nothing -> return ()
-    
-    -- endLabel:
     emit $ Label endLabel
 
 genStmt (While cond bodyStmts) = do
-    startLabel <- freshLabel         -- Rótulo do início do loop
-    endLabel <- freshLabel           -- Rótulo do fim do loop
-    
-    -- startLabel:
+    startLabel <- freshLabel
+    endLabel <- freshLabel
     emit $ Label startLabel
-    
-    -- Gera código para condição
-    condExpr <- genExpr cond
-    
-    -- if (cond == false) goto endLabel
-    emit $ IfZ condExpr endLabel
-    
-    -- Corpo do loop
+    condTemp <- genExpr cond
+    emit $ IfZ condTemp endLabel
     genStmts bodyStmts
-    
-    -- goto startLabel (voltar ao início)
     emit $ Goto startLabel
-    
-    -- endLabel:
     emit $ Label endLabel
 
--- Gera código para Put_Line e Get_Line
-genStmt (ExpressionStmt (Call "Put_Line" [arg])) = do
-    tacArg <- genExpr arg            -- Gera código para argumento
-    emit $ Param tacArg              -- Passa como parâmetro
-    emit $ Call "Put_Line" 1         -- Chama Put_Line com 1 parâmetro
+-- Gera código para Put_Line
+genStmt (ExpressionStmt (AST.Call "Put_Line" [arg])) = do
+    tacArg <- genExpr arg
+    emit $ Param tacArg
+    emit $ TAC.Call "Put_Line" 1
 
-genStmt (ExpressionStmt (Call "Get_Line" [])) = do
-    temp <- freshTemp                -- Cria temporário para resultado
-    emit $ Call "Get_Line" 0         -- Chama Get_Line sem parâmetros
-    emit $ Assign "input" temp       -- Armazena resultado em "input"
+-- Gera código para Get_Line  
+genStmt (ExpressionStmt (AST.Call "Get_Line" [])) = do
+    resultTemp <- freshTemp
+    emit $ TAC.Call "Get_Line" 0
+    emit $ Assign (tempName resultTemp) (TACVar "retval")
+
+-- Gera código para outras chamadas de função
+genStmt (ExpressionStmt (AST.Call func args)) = do
+    tacArgs <- mapM genExpr args
+    mapM_ (\a -> emit $ Param a) tacArgs
+    resultTemp <- freshTemp
+    emit $ TAC.Call func (length args)
+    emit $ Assign (tempName resultTemp) (TACVar "retval")
 
 -- Gera código para expressões
 genExpr :: Expression -> GenM TACExpr
-genExpr (Var v) = return $ TACVar v  -- Variável direta
-
-genExpr (IntLit i) = return $ TACInt i    -- Literal inteiro
-genExpr (StrLit s) = return $ TACStr s    -- Literal string
-genExpr (BoolLit b) = return $ TACBool b  -- Literal booleano
+genExpr (Var v) = return $ TACVar v
+genExpr (IntLit i) = return $ TACInt i
+genExpr (StrLit s) = return $ TACStr s
+genExpr (BoolLit b) = return $ TACBool b
 
 genExpr (BinOp op left right) = do
-    leftExpr <- genExpr left         -- Gera código para operando esquerdo
-    rightExpr <- genExpr right       -- Gera código para operando direito
-    temp <- freshTemp                -- Cria temporário para resultado
-    -- Emite instrução: temp = left op right
-    emit $ Assign (show temp) (TACBinOp op leftExpr rightExpr)
-    return temp
+    leftTemp <- genExpr left
+    rightTemp <- genExpr right
+    resultTemp <- freshTemp
+
+
+    case op of
+        Add -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " + " ++ TAC.showExpr rightTemp ++ ")")
+        Sub -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " - " ++ TAC.showExpr rightTemp ++ ")")
+        Mul -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " * " ++ TAC.showExpr rightTemp ++ ")")
+        Div -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " / " ++ TAC.showExpr rightTemp ++ ")")
+        Eq  -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " == " ++ TAC.showExpr rightTemp ++ ")")
+        Lt  -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " < " ++ TAC.showExpr rightTemp ++ ")")
+        Gt  -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " > " ++ TAC.showExpr rightTemp ++ ")")
+        And -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " and " ++ TAC.showExpr rightTemp ++ ")")
+        Or  -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " or " ++ TAC.showExpr rightTemp ++ ")")
+        _   -> emit $ Assign (tempName resultTemp) (TACVar $ "(" ++ TAC.showExpr leftTemp ++ " ?? " ++ TAC.showExpr rightTemp ++ ")")
+
+    return resultTemp
 
 genExpr (UnOp op expr) = do
-    expr' <- genExpr expr            -- Gera código para expressão
-    temp <- freshTemp                -- Cria temporário para resultado
-    -- Emite instrução: temp = op expr
-    emit $ Assign (show temp) (TACUnOp op expr')
-    return temp
+    exprTemp <- genExpr expr
+    resultTemp <- freshTemp
 
-genExpr (Call func args) = do
-    tacArgs <- mapM genExpr args     -- Gera código para argumentos
-    mapM_ (\a -> emit $ Param a) tacArgs  -- Passa cada argumento
-    temp <- freshTemp                -- Cria temporário para retorno
-    emit $ Call func (length args)   -- Chama função
-    emit $ Assign (show temp) (TACVar "retval")  -- Armazena valor de retorno
-    return temp
+    case op of
+        Not -> emit $ Assign (tempName resultTemp) (TACVar $ "not " ++ TAC.showExpr exprTemp)
+        Neg -> emit $ Assign (tempName resultTemp) (TACVar $ "-" ++ TAC.showExpr exprTemp)
 
--- Gera um novo rótulo único
-freshLabel :: GenM String
-freshLabel = do
-    (n, _) <- get                    -- Pega contador atual
-    put (n+1, [])                    -- Incrementa contador
-    return $ "L" ++ show n           -- Retorna L1, L2, etc.
+    return resultTemp
 
--- Operadores binários para TAC
-data TACBinOp = TACAdd | TACSub | TACMul | TACDiv | TACEq | TACNeq | TACLt | TACGt | TACLeq | TACGeq | TACAnd | TACOr
-
--- Operadores unários para TAC  
-data TACUnOp = TACNot | TACNeg
+genExpr (AST.Call func args) = do
+    tacArgs <- mapM genExpr args
+    mapM_ (\a -> emit $ Param a) tacArgs
+    resultTemp <- freshTemp
+    emit $ TAC.Call func (length args)
+    emit $ Assign (tempName resultTemp) (TACVar "retval")
+    return resultTemp
