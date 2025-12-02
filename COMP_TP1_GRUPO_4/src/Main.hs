@@ -19,6 +19,8 @@ main = do
     let filePath = "examples/test1.ada"
     
     putStrLn $ "PROCURANDO ARQUIVO: " ++ filePath
+    
+    compileAdaFile filePath
 
 -- Compila um arquivo .ada usando o lexer e parser existentes
 compileAdaFile :: FilePath -> IO ()
