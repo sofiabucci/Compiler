@@ -26,13 +26,13 @@ compileAdaFile filePath = do
     -- Lê o conteúdo do arquivo
     content <- readFile filePath
     
-    putStrLn "📝 CÓDIGO FONTE ADA:"
+    putStrLn "CÓDIGO FONTE ADA:"
     putStrLn "==================="
     putStrLn content
     putStrLn ""
     
     -- Usa o lexer e parser existentes
-    putStrLn "🔍 FAZENDO LEXING E PARSING..."
+    putStrLn "FAZENDO LEXING E PARSING..."
     putStrLn "=============================="
     
     let tokens = alexScanTokens content
